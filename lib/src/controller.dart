@@ -113,6 +113,14 @@ class MultiSplitViewController extends ChangeNotifier {
 
   int get areasCount => _areas.length;
 
+  /// Restores every area to the size or flex given to its constructor.
+  void resetSizes() {
+    for (Area area in _areas) {
+      AreaHelper.reset(area: area);
+    }
+    notifyListeners();
+  }
+
   /// Gets the area of a given widget index.
   Area getArea(int index) {
     return _areas[index];

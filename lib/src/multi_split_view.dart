@@ -37,6 +37,7 @@ class MultiSplitView extends StatefulWidget {
       this.sizeOverflowPolicy = SizeOverflowPolicy.shrinkLast,
       this.sizeUnderflowPolicy = SizeUnderflowPolicy.stretchLast,
       this.minSizeRecoveryPolicy = MinSizeRecoveryPolicy.firstToLast,
+      this.flexResizePolicy = FlexResizePolicy.proportional,
       this.fallbackWidth = 500,
       this.fallbackHeight = 500,
       this.builder,
@@ -86,6 +87,10 @@ class MultiSplitView extends StatefulWidget {
   /// /// Represents the order in which the minimum size of the areas is recovered.
   final MinSizeRecoveryPolicy minSizeRecoveryPolicy;
 
+  /// Represents how flex areas absorb the change when a divider between a
+  /// size area and a flex area is dragged.
+  final FlexResizePolicy flexResizePolicy;
+
   /// Enables a workaround for https://github.com/flutter/flutter/issues/14288
   /// The workaround to minimize the problem is to round the coordinates to
   /// integer values. As a side effect, some areas may stretch or shrink
@@ -120,6 +125,10 @@ class _MultiSplitViewState extends State<MultiSplitView> {
   late MultiSplitViewController _controller;
 
   _DraggingDivider? _draggingDivider;
+
+  /// Set while dragging a divider whose neighbours resize from where the
+  /// drag started (see [AnchoredDrag]).
+  AnchoredDrag? _anchoredDrag;
 
   ValueNotifier<int?> _hoverDividerIndex = ValueNotifier<int?>(null);
 
@@ -373,6 +382,17 @@ class _MultiSplitViewState extends State<MultiSplitView> {
           initialInnerPos: widget.axis == Axis.horizontal
               ? detail.localPosition.dx
               : detail.localPosition.dy);
+      _anchoredDrag = _layoutConstraints == null
+          ? null
+          : AnchoredDrag.start(
+              controller: _controller,
+              layoutConstraints: _layoutConstraints!,
+              dividerIndex: index,
+              dividerStart: _layoutConstraints!.dividerStartOf(
+                  index: index,
+                  controller: _controller,
+                  antiAliasingWorkaround: widget.antiAliasingWorkaround),
+              flexResizePolicy: widget.flexResizePolicy);
     });
   }
 
@@ -396,6 +416,20 @@ class _MultiSplitViewState extends State<MultiSplitView> {
     }
 
     final double newDividerStart = position - _draggingDivider!.initialInnerPos;
+    final AnchoredDrag? anchoredDrag = _anchoredDrag;
+    if (anchoredDrag != null &&
+        anchoredDrag.dividerIndex == index &&
+        anchoredDrag.matches(_controller)) {
+      anchoredDrag.update(
+          controller: _controller,
+          layoutConstraints: _layoutConstraints!,
+          delta: newDividerStart - anchoredDrag.dividerStart);
+      controllerHelper.notifyListeners();
+      if (widget.onDividerDragUpdate != null) {
+        Future.delayed(Duration.zero, () => widget.onDividerDragUpdate!(index));
+      }
+      return;
+    }
     final double lastDividerStart = _layoutConstraints!.dividerStartOf(
         index: index,
         controller: _controller,
@@ -420,6 +454,7 @@ class _MultiSplitViewState extends State<MultiSplitView> {
     }
     setState(() {
       _draggingDivider = null;
+      _anchoredDrag = null;
     });
   }
 
@@ -438,6 +473,7 @@ class _MultiSplitViewState extends State<MultiSplitView> {
     }
     setState(() {
       _draggingDivider = null;
+      _anchoredDrag = null;
     });
     if (widget.onDividerDragEnd != null) {
       Future.delayed(Duration.zero, () => widget.onDividerDragEnd!(index));

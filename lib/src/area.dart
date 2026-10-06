@@ -19,12 +19,19 @@ import 'package:multi_split_view/src/internal/num_util.dart';
 /// to resolve the following inconsistencies:
 ///
 /// * If all areas are using size, they will all be converted to use flex.
+///
+/// The optional [minPixels] and [collapseSize] are pixel thresholds applied
+/// while a divider next to this area is dragged. See
+/// [MultiSplitViewController.resetSizes] to restore the constructor
+/// [size] or [flex].
 class Area extends ChangeNotifier {
   Area(
       {double? size,
       double? flex,
       double? min,
       double? max,
+      double? minPixels,
+      double? collapseSize,
       dynamic id,
       this.data,
       this.builder})
@@ -39,7 +46,17 @@ class Area extends ChangeNotifier {
     _setMaxWithoutNotify(max);
     _setFlexWithoutNotify(value: flex, useMin: true, useMax: true);
     _setSizeWithoutNotify(value: size, useMin: true, useMax: true);
+    NumUtil.validateDouble('minPixels', minPixels);
+    NumUtil.validateDouble('collapseSize', collapseSize);
+    _minPixels = minPixels;
+    _collapseSize = collapseSize;
+    _initialSize = _size;
+    _initialFlex = _flex;
   }
+
+  /// The [size] or [flex] given to the constructor.
+  late final double? _initialSize;
+  late final double? _initialFlex;
 
   void _checkMinMax() {
     if (_min != null && _max != null && _max! < _min!) {
@@ -97,6 +114,36 @@ class Area extends ChangeNotifier {
         _hashChanger!();
       }
     }
+  }
+
+  /// Minimum size in pixels enforced while dragging an adjacent divider.
+  ///
+  /// Unlike [min], which uses flex units for flex areas, this is always
+  /// pixels. It is not enforced by layout, so a small container may still
+  /// render the area below this size.
+  double? get minPixels => _minPixels;
+  double? _minPixels;
+
+  /// Sets the area pixel minimum and notify listeners.
+  void set minPixels(double? value) {
+    NumUtil.validateDouble('minPixels', value);
+    _minPixels = value;
+    notifyListeners();
+  }
+
+  /// Size in pixels below which dragging an adjacent divider collapses
+  /// the area to zero.
+  ///
+  /// A collapsed area stays collapsed while it is dragged open by less than
+  /// this size, then reopens at no less than [minPixels].
+  double? get collapseSize => _collapseSize;
+  double? _collapseSize;
+
+  /// Sets the area collapse size and notify listeners.
+  void set collapseSize(double? value) {
+    NumUtil.validateDouble('collapseSize', value);
+    _collapseSize = value;
+    notifyListeners();
   }
 
   double? _size;
@@ -191,6 +238,8 @@ class Area extends ChangeNotifier {
     double? Function()? flex,
     double? Function()? min,
     double? Function()? max,
+    double? Function()? minPixels,
+    double? Function()? collapseSize,
     dynamic Function()? data,
     AreaWidgetBuilder? Function()? builder,
   }) {
@@ -200,6 +249,8 @@ class Area extends ChangeNotifier {
       flex: flex == null ? this.flex : flex(),
       min: min == null ? this.min : min(),
       max: max == null ? this.max : max(),
+      minPixels: minPixels == null ? this.minPixels : minPixels(),
+      collapseSize: collapseSize == null ? this.collapseSize : collapseSize(),
       data: data == null ? this.data : data(),
       builder: builder == null ? this.builder : builder(),
     );
@@ -217,6 +268,17 @@ class AreaHelper {
   /// Sets the area size value without notify listeners.
   static void setSize({required Area area, required double? size}) {
     area._setSizeWithoutNotify(value: size, useMin: false, useMax: false);
+  }
+
+  /// Restores the constructor size or flex without notify listeners.
+  static void reset({required Area area}) {
+    if (area._size != area._initialSize || area._flex != area._initialFlex) {
+      area._size = area._initialSize;
+      area._flex = area._initialFlex;
+      if (area._hashChanger != null) {
+        area._hashChanger!();
+      }
+    }
   }
 
   /// Sets the area min value without notify listeners.
