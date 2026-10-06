@@ -7,9 +7,9 @@ name: Analyze
 
 on:
   push:
-    branches: [ "master" ]
+    branches: [ "master", "mek-org" ]
   pull_request:
-    branches: [ "master" ]
+    branches: [ "master", "mek-org" ]
 
 jobs:
   build:
